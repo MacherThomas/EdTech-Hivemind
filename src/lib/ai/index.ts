@@ -1,15 +1,13 @@
+import { aiEnabled } from "../features";
 import { AnthropicProvider } from "./anthropic";
-import { OfflineProvider } from "./offline";
 import type { AIProvider } from "./types";
 
 let provider: AIProvider | null = null;
 
-/** Claude when credentials are configured, otherwise the offline stub. */
-export function getAI(): AIProvider {
-  if (!provider) {
-    provider = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN ? new AnthropicProvider() : new OfflineProvider();
-  }
-  return provider;
+/** The AI provider, or null when AI features are disabled (the default). */
+export function getAI(): AIProvider | null {
+  if (!aiEnabled()) return null;
+  return (provider ??= new AnthropicProvider());
 }
 
 export type * from "./types";

@@ -100,7 +100,7 @@ export default async function MaterialsPage({
         </form>
 
         {materials.length === 0 && (
-          <Notice title="No materials yet.">Share notes, slides or retired past exams. They help everyone, and they help the AI study guide too.</Notice>
+          <Notice title="No materials yet.">Share notes, slides or retired past exams. Tag them with topics so classmates can find them.</Notice>
         )}
 
         {sorted.map(([id, g]) => (
@@ -126,7 +126,7 @@ export default async function MaterialsPage({
                       {[m.offering?.term.name, m.professor?.name, `shared by ${m.uploader.displayName}`, formatDate(m.createdAt)].filter(Boolean).join(" · ")}
                     </p>
                     {m.description && <p style={{ margin: 0 }}>{m.description}</p>}
-                    {gate.gated && <p className="small" style={{ margin: 0 }}>{gate.reason} The AI won&apos;t use it for worked solutions.</p>}
+                    {gate.gated && <p className="small" style={{ margin: 0 }}>{gate.reason} Please don&apos;t share worked solutions to it.</p>}
                     <div className="cluster">
                       {downloadable ? (
                         <a className="btn btn-secondary btn-small" href={`/api/materials/${m.id}`}>Download <span className="visually-hidden">{m.title}</span></a>
@@ -171,7 +171,7 @@ export default async function MaterialsPage({
             <ActionForm action={uploadMaterial.bind(null, courseId)}>
               <div className="field">
                 <label htmlFor="file">File</label>
-                <span className="hint" id="file-hint">PDF, Word, PowerPoint, text, Markdown or image, up to 15 MB. Text and Markdown files can also be used by the AI.</span>
+                <span className="hint" id="file-hint">PDF, Word, PowerPoint, text, Markdown or image, up to 15 MB.</span>
                 <input id="file" name="file" type="file" required aria-describedby="file-hint" />
               </div>
               <div className="field">
@@ -186,7 +186,7 @@ export default async function MaterialsPage({
               </div>
               <fieldset className="field">
                 <legend>If this is an exam, problem set or solutions: is it still graded?</legend>
-                <span className="hint">This decides what the AI is allowed to do with it. If you&apos;re not sure, say so.</span>
+                <span className="hint">Possibly-live solutions are withheld from download until retired. If you&apos;re not sure, say so.</span>
                 {[
                   ["RETIRED", "No, it's retired (e.g. a past year's exam)"],
                   ["POSSIBLY_LIVE", "It may still be graded"],
@@ -200,8 +200,8 @@ export default async function MaterialsPage({
               </fieldset>
               <fieldset className="field">
                 <legend>Topics</legend>
-                <span className="hint">Tag what it covers. If you skip this for a text file, the AI will suggest topics.</span>
-                {course.topics.length === 0 && <span className="small muted">No topics yet. Add them in the AI study guide tab.</span>}
+                <span className="hint">Tag what it covers so it shows up under the right topic.</span>
+                {course.topics.length === 0 && <span className="small muted">No topics yet. Add them in the Study guide tab.</span>}
                 {course.topics.map((t) => (
                   <label key={t.id} className="radio-row" style={{ fontWeight: 400 }}>
                     <input type="checkbox" name="topicIds" value={t.id} /> {t.name}

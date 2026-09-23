@@ -59,7 +59,7 @@ export async function createStudyPlan(input: {
   });
 }
 
-function shuffle<T>(xs: T[]): T[] {
+export function shuffle<T>(xs: T[]): T[] {
   const a = [...xs];
   for (let i = a.length - 1; i > 0; i--) {
     const j = randomInt(i + 1);
@@ -78,28 +78,34 @@ export function isMiscalibrated(q: { difficulty: number; aggregate: { attempts: 
 }
 
 /**
- * Attaches practice questions to a session (lazily, on first open). Reuses
- * the course question bank first; sourced-from-material questions only when
- * the material passes the integrity gate; tops up with original AI questions.
+ * Attaches practice questions to a session (lazily, on open). Draws from the
+ * course's community question bank; sourced-from-material questions only when
+ * the material passes the integrity gate. Only tops up with original AI
+ * questions when AI is enabled. A session that found nothing is retried the
+ * next time it's opened, so newly contributed questions get picked up.
  */
 export async function ensureSessionQuestions(sessionId: string, userId: string) {
   const session = await db.studySession.findUniqueOrThrow({
     where: { id: sessionId },
-    include: { plan: { include: { course: true } }, topics: { include: { topic: true } }, questions: true },
+    include: { plan: { include: { course: true } }, topics: { include: { topic: true } }, questions: { include: { question: true } } },
   });
-  if (session.questions.length > 0) return;
+  // Only top up topics that don't have a question in this session yet.
+  const covered = new Set(session.questions.map((q) => q.question.topicId));
+  const uncovered = session.topics.filter(({ topic }) => !covered.has(topic.id));
+  if (uncovered.length === 0) return;
   const course = session.plan.course;
   const perTopic = Math.max(1, Math.ceil(config.study.questionsPerSession / Math.max(1, session.topics.length)));
-  const chosen: string[] = [];
+  const chosen: string[] = session.questions.map((q) => q.questionId);
+  const startPos = session.questions.length;
 
-  for (const { topic } of session.topics) {
+  for (const { topic } of uncovered) {
     const answeredRight = await db.performanceRecord.findMany({
       where: { userId, topicId: topic.id, correct: true },
       select: { questionId: true },
     });
     const skip = new Set(answeredRight.map((r) => r.questionId));
     const bank = await db.practiceQuestion.findMany({
-      where: { topicId: topic.id },
+      where: { topicId: topic.id, moderation: "VISIBLE" },
       include: { aggregate: true, sourceMaterial: { include: { offering: { include: { term: true } } } } },
     });
     const usable = bank
@@ -109,18 +115,23 @@ export async function ensureSessionQuestions(sessionId: string, userId: string) 
         const m = q.sourceMaterial;
         return !!m && !assessMaterialGate({ kind: m.kind, assessmentStatus: m.assessmentStatus, termEndsOn: m.offering?.term.endsOn }).gated;
       })
-      .filter((q) => Math.abs(q.difficulty - session.targetDifficulty) <= 1)
-      .sort((a, b) => Number(isMiscalibrated(a)) - Number(isMiscalibrated(b)));
+      // Prefer questions near the target difficulty and well calibrated; fall back to any.
+      .sort(
+        (a, b) =>
+          Number(Math.abs(a.difficulty - session.targetDifficulty) > 1) - Number(Math.abs(b.difficulty - session.targetDifficulty) > 1) ||
+          Number(isMiscalibrated(a)) - Number(isMiscalibrated(b)),
+      );
     const picked = usable.slice(0, perTopic).map((q) => q.id);
 
-    if (picked.length < perTopic) {
+    const ai = getAI();
+    if (ai && picked.length < perTopic) {
       const entries = await groundingEntries(course.id, `${topic.name} ${topic.summary ?? ""}`, { topicId: topic.id, limit: 3, topicOnly: true });
       const retired = await db.material.findMany({
         where: { courseId: course.id, topics: { some: { id: topic.id } }, assessmentStatus: "RETIRED", extractedText: { not: null }, moderation: "VISIBLE" },
         include: { offering: { include: { term: true } } },
         take: 3,
       });
-      const drafts = await getAI().generateQuestions({
+      const drafts = await ai.generateQuestions({
         courseName: `${course.code} ${course.name}`,
         topic: { name: topic.name, summary: topic.summary },
         count: perTopic - picked.length,
@@ -151,8 +162,10 @@ export async function ensureSessionQuestions(sessionId: string, userId: string) 
     }
     chosen.push(...picked);
   }
+  const added = chosen.slice(startPos);
+  if (added.length === 0) return;
   await db.studySessionQuestion.createMany({
-    data: chosen.map((questionId, position) => ({ sessionId, questionId, position })),
+    data: added.map((questionId, i) => ({ sessionId, questionId, position: startPos + i })),
     skipDuplicates: true,
   });
   if (session.status === "UPCOMING") await db.studySession.update({ where: { id: sessionId }, data: { status: "IN_PROGRESS" } });
@@ -162,10 +175,11 @@ export type Reteach = { text: string; source: "community" | "ai"; entryId?: stri
 
 /**
  * Mechanism 2 (re-teaching): after a wrong answer, show a *different*
- * explanation. Prefer a community entry on the topic the student hasn't
- * read yet; only fall back to an AI re-explanation if none exists.
+ * explanation: a community entry on the topic the student hasn't read yet.
+ * With AI enabled, falls back to an AI re-explanation; otherwise returns null
+ * and the UI points the student to chat.
  */
-export async function reteachFor(userId: string, topicId: string, mistake: { prompt: string; response: string; correctAnswer: string }): Promise<Reteach> {
+export async function reteachFor(userId: string, topicId: string, mistake: { prompt: string; response: string; correctAnswer: string }): Promise<Reteach | null> {
   const topic = await db.topic.findUniqueOrThrow({ where: { id: topicId }, include: { course: true } });
   const seen = await db.knowledgeEntryView.findMany({ where: { userId, entry: { topicId } }, select: { entryId: true } });
   const seenIds = new Set(seen.map((s) => s.entryId));
@@ -180,7 +194,9 @@ export async function reteachFor(userId: string, topicId: string, mistake: { pro
     await db.knowledgeEntryView.create({ data: { userId, entryId: fresh.id } });
     return { text: fresh.body, source: fresh.origin === "AI_DRAFTED" ? "ai" : "community", entryId: fresh.id, entryTitle: fresh.title };
   }
-  const text = await getAI().reteach({
+  const ai = getAI();
+  if (!ai) return null;
+  const text = await ai.reteach({
     courseName: `${topic.course.code} ${topic.course.name}`,
     topic: { name: topic.name, summary: topic.summary },
     mistake,
@@ -189,19 +205,36 @@ export async function reteachFor(userId: string, topicId: string, mistake: { pro
   return { text, source: "ai" };
 }
 
-export async function submitAnswer(input: { userId: string; sessionId: string; questionId: string; response: string }) {
+export type AnswerResult =
+  | { status: "graded"; correct: boolean; explanation: string; answer: string; reteach: Reteach | null }
+  /** Written answers without AI grading: show the model answer and let the student mark themselves. */
+  | { status: "self-grade"; response: string; explanation: string; answer: string };
+
+export async function submitAnswer(input: {
+  userId: string;
+  sessionId: string;
+  questionId: string;
+  response: string;
+  selfGrade?: "correct" | "incorrect";
+}): Promise<AnswerResult> {
   const sq = await db.studySessionQuestion.findUniqueOrThrow({
     where: { sessionId_questionId: { sessionId: input.sessionId, questionId: input.questionId } },
     include: { question: true, session: { include: { plan: true } } },
   });
   if (sq.session.plan.userId !== input.userId) throw new Error("Not your study plan.");
   const q = sq.question;
-  const correct =
-    q.type === "MULTIPLE_CHOICE"
-      ? input.response.trim() === q.answer.trim()
-      : q.type === "NUMERIC"
-        ? Math.abs(Number(input.response) - Number(q.answer)) <= Math.max(1e-6, Math.abs(Number(q.answer)) * 0.01)
-        : await getAI().gradeShortAnswer({ prompt: q.prompt, expected: q.answer, response: input.response });
+  const already = await db.performanceRecord.findFirst({ where: { userId: input.userId, sessionId: input.sessionId, questionId: q.id } });
+  if (already) return { status: "graded", correct: already.correct, explanation: q.explanation, answer: q.answer, reteach: null };
+
+  let correct: boolean;
+  if (q.type === "MULTIPLE_CHOICE") correct = input.response.trim() === q.answer.trim();
+  else if (q.type === "NUMERIC") correct = Math.abs(Number(input.response) - Number(q.answer)) <= Math.max(1e-6, Math.abs(Number(q.answer)) * 0.01);
+  else {
+    const ai = getAI();
+    if (ai) correct = await ai.gradeShortAnswer({ prompt: q.prompt, expected: q.answer, response: input.response });
+    else if (input.selfGrade) correct = input.selfGrade === "correct";
+    else return { status: "self-grade", response: input.response, explanation: q.explanation, answer: q.answer };
+  }
 
   const now = new Date();
   await db.performanceRecord.create({
@@ -225,7 +258,7 @@ export async function submitAnswer(input: { userId: string; sessionId: string; q
   });
 
   const reteach = correct ? null : await reteachFor(input.userId, q.topicId, { prompt: q.prompt, response: input.response, correctAnswer: q.answer });
-  return { correct, explanation: q.explanation, answer: q.answer, reteach };
+  return { status: "graded", correct, explanation: q.explanation, answer: q.answer, reteach };
 }
 
 export async function completeSession(userId: string, sessionId: string) {

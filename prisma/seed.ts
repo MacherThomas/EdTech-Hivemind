@@ -1,9 +1,9 @@
 /**
  * Seeds institution data (always) and optional demo content (SEED_DEMO=1).
  *
- * The domain allowlist below is a starting point. The exact set of valid IE
- * email domains must be confirmed with IE (docs/CHECKPOINTS.md #3). It lives in
- * the SchoolDomain table, so changing it needs no code change.
+ * Sign-up is students only (@student.ie.edu). Confirm with IE IT that this is
+ * the complete set of student domains (docs/CHECKPOINTS.md #3). It lives in the
+ * SchoolDomain table, so changing it needs no code change.
  */
 import { PrismaClient } from "@prisma/client";
 import { recomputeReputation } from "../src/jobs/reputation";
@@ -154,6 +154,36 @@ async function demo(schoolId: string) {
         topics: { connect: [{ id: topics.find((t) => t.name === "Monopoly")!.id }] },
       },
     });
+  }
+  if ((await db.practiceQuestion.count({ where: { courseId: micro.id } })) === 0) {
+    const sd = topics.find((t) => t.name === "Supply and demand")!;
+    const midterm = await db.material.findFirstOrThrow({ where: { courseId: micro.id, title: "Fall 2025 midterm (retired)" } });
+    const qs = [
+      { topicId: sd.id, authorId: ana.id, type: "MULTIPLE_CHOICE" as const, difficulty: 1,
+        prompt: "The price of a good rises while demand is unchanged. What happens to quantity demanded?",
+        choices: ["It falls (movement along the demand curve)", "It rises", "The demand curve shifts right", "Nothing"],
+        answer: "It falls (movement along the demand curve)", explanation: "A price change moves you along the demand curve; only non-price factors shift it." },
+      { topicId: sd.id, authorId: diego.id, type: "MULTIPLE_CHOICE" as const, difficulty: 2,
+        prompt: "Incomes rise and the good is normal. What happens in the market?",
+        choices: ["Demand shifts right: price and quantity rise", "Demand shifts left: price and quantity fall", "Supply shifts right", "Only price rises"],
+        answer: "Demand shifts right: price and quantity rise", explanation: "Higher income increases demand for normal goods, raising both equilibrium price and quantity." },
+      { topicId: sd.id, authorId: elif.id, type: "SHORT_ANSWER" as const, difficulty: 2,
+        prompt: "In one sentence, what is the difference between a change in demand and a change in quantity demanded?",
+        answer: "A change in demand is a shift of the whole curve (non-price factors); a change in quantity demanded is a movement along it caused by the good's own price.",
+        explanation: "Own price → movement along. Anything else (income, tastes, related prices) → shift." },
+      { topicId: elasticity.id, authorId: ana.id, type: "MULTIPLE_CHOICE" as const, difficulty: 2,
+        prompt: "Price elasticity of demand is −1.4. Is demand elastic or inelastic?",
+        choices: ["Elastic", "Inelastic", "Unit elastic", "Perfectly inelastic"], answer: "Elastic",
+        explanation: "|−1.4| > 1, so quantity responds more than proportionally to price." },
+      { topicId: elasticity.id, authorId: ana.id, type: "NUMERIC" as const, difficulty: 2, sourceMaterialId: midterm.id,
+        prompt: "The price of coffee rises 10% and quantity demanded falls 5%. What is the absolute value of the price elasticity of demand?",
+        answer: "0.5", explanation: "5% / 10% = 0.5, so demand is inelastic." },
+    ];
+    for (const q of qs) {
+      await db.practiceQuestion.create({
+        data: { ...q, courseId: micro.id, origin: "sourceMaterialId" in q ? "SOURCED_FROM_MATERIAL" : "COMMUNITY" },
+      });
+    }
   }
   for (const u of users) await recomputeReputation({ userId: u.id, courseId: micro.id });
 

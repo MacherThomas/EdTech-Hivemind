@@ -8,7 +8,10 @@
 prisma/schema.prisma      data model (heavily commented, the source of truth)
 src/lib/                  domain logic — no React
   auth/                   email rules, challenges, sessions
-  ai/                     provider interface; Claude (anthropic.ts) + offline stub
+  ai/                     provider interface + Claude implementation (off unless AI_ENABLED=true)
+  features.ts             feature flags (aiEnabled)
+  syllabus.ts             deterministic syllabus → topics parser
+  questions.ts            question-bank helpers
   study/planner.ts        static plan construction (pure)
   study/adaptive.ts       the four adaptive mechanisms (pure)
   study/service.ts        DB side of the study guide
@@ -35,14 +38,15 @@ scripts/e2e-walkthrough.mjs  browser walkthrough of the core loop
 - **Privacy.** `PerformanceRecord` and `UserTopicProgress` are only read for their owner. Aggregates (`TopicAggregate`, `QuestionAggregate`) are rebuilt by a job and only displayed when `distinctUsers ≥ privacy.minCohortSize`. No grades, no official records.
 - **Emergent tutors.** `CourseReputation` stores the raw signals (upvotes, resolved answers, entries, sessions, ratings, upheld flags), and the score and eligibility are computed from them against `config.tutors`, so thresholds can be retuned without data changes. `TutorProfile` is per user (spans courses); `TutorCourseRate` is per tutor × course.
 - **Jobs.** Promotion, reputation, moderation, aggregates, topic building, plan adaptation and AI answers all live in `src/jobs/` and are invoked via `runJob` (await) or `enqueue` (background). Today they run in-process; swapping in a queue (pg-boss, SQS…) only touches `src/jobs/index.ts`.
-- **AI.** `getAI()` returns the Claude provider when credentials exist, else the offline stub. The Claude provider uses structured outputs (Zod-validated), adaptive thinking, prompt caching of the stable system prompt, and server-side refusal fallbacks (`fallbacks: "default"`). Student-written text is wrapped in tags and treated as data, not instructions.
+- **AI is off by default.** `getAI()` returns null unless `AI_ENABLED=true` and credentials exist; every caller has a non-AI path (syllabus parser, community question bank, self-marking, community re-teaching, no chat auto-answer). When on, The Claude provider uses structured outputs (Zod-validated), adaptive thinking, prompt caching of the stable system prompt, and server-side refusal fallbacks (`fallbacks: "default"`). Student-written text is wrapped in tags and treated as data, not instructions.
 - **Security posture.** Server-action bound arguments and form fields are treated as untrusted: every foreign key is checked against the course/school (`assertBelongsToCourse`), and the flag action derives the course from the target itself. Session tokens and sign-in codes are HMAC-hashed at rest. Downloads are `attachment` + `nosniff`.
 - **Accessibility / brand.** IE design tokens (`src/app/tokens.css`) with a semantic layer. Contrast-validated pairs (e.g. input borders use Middle Grey for 3:1). Status is always text + icon + colour. Labelled forms, visible focus, skip link, 44px targets, reflow at 320px.
 
 ## Known gaps / next steps
 
 - Real payment processor adapter (blocked on the payout decision; see CHECKPOINTS).
-- Text extraction from PDF/DOCX uploads. Only text/Markdown feed the AI today.
+- Text extraction from PDF/DOCX uploads (only relevant if AI is re-enabled).
+- Reputation credit for writing practice questions (they're attributed, but not scored yet).
 - Endorsements for directly contributed knowledge entries (today only trusted members' contributions start verified).
 - TutoringSession → KnowledgeEntry (`TUTOR_SESSION` source) capture flow.
 - Knowledge-entry efficacy (views are logged privately; correlation job not written).

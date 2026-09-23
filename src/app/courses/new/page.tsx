@@ -12,7 +12,7 @@ export default async function NewCoursePage() {
   return (
     <div className="stack" style={{ maxWidth: 640 }}>
       <h1>Add a course</h1>
-      <p>Can&apos;t find your course? Add it. You&apos;ll be enrolled automatically, and the AI study guide can start from just the name until someone adds the syllabus.</p>
+      <p>Can&apos;t find your course? Add it. You&apos;ll be enrolled automatically. Add the syllabus afterwards to set up the study guide&apos;s topics.</p>
       <div className="card">
         <ActionForm action={createCourse}>
           <div className="form-grid">

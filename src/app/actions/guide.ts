@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
-import { assertCanContribute, canViewCourse } from "@/lib/permissions";
-import { completeSession, createStudyPlan, submitAnswer } from "@/lib/study/service";
+import { assertBelongsToCourse, assertCanContribute, canViewCourse } from "@/lib/permissions";
+import { assessMaterialGate } from "@/lib/integrity";
+import { completeSession, createStudyPlan, shuffle, submitAnswer } from "@/lib/study/service";
 import { runJob } from "@/jobs";
-import { handle, str, UserError } from "./util";
+import { aiEnabled } from "@/lib/features";
+import { handle, optStr, str, UserError } from "./util";
 import type { FormState } from "@/components/ActionForm";
 
 export async function saveSyllabus(courseId: string, _: FormState, form: FormData) {
@@ -19,11 +21,16 @@ export async function saveSyllabus(courseId: string, _: FormState, form: FormDat
     await db.course.update({ where: { id: courseId }, data: { syllabusText: text } });
     const res = (await runJob("guide.buildTopics", { courseId })) as { count: number };
     revalidatePath(`/courses/${courseId}/guide`);
+    if (res.count === 0) {
+      return { error: 'Syllabus saved, but no topic lines were recognised. Use lines like "Week 1: Supply and demand" or a numbered list, or add topics by hand.' };
+    }
     return { ok: `Topic structure rebuilt from the syllabus (${res.count} topics).` };
   });
 }
 
+/** AI-only: infer a topic structure without a syllabus. */
 export async function inferTopics(courseId: string) {
+  if (!aiEnabled()) return;
   const user = await requireUser();
   await assertCanContribute(user, courseId);
   await runJob("guide.buildTopics", { courseId });
@@ -67,7 +74,9 @@ export async function answerQuestion(sessionId: string, questionId: string, _: A
   const user = await requireUser();
   const response = str(form, "response");
   if (!response) return { error: "Answer the question first." };
-  return submitAnswer({ userId: user.id, sessionId, questionId, response });
+  const sg = str(form, "selfGrade");
+  const selfGrade = sg === "correct" || sg === "incorrect" ? sg : undefined;
+  return submitAnswer({ userId: user.id, sessionId, questionId, response, selfGrade });
 }
 
 export async function finishSession(courseId: string, planId: string, sessionId: string) {
@@ -80,4 +89,74 @@ export async function archivePlan(courseId: string, planId: string) {
   const user = await requireUser();
   await db.studyPlan.updateMany({ where: { id: planId, userId: user.id }, data: { status: "ARCHIVED" } });
   redirect(`/courses/${courseId}/guide`);
+}
+
+const QuestionInput = z.object({
+  topicId: z.string().min(1, "Pick a topic."),
+  type: z.enum(["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMERIC"]),
+  prompt: z.string().trim().min(10, "Write the question (10+ characters).").max(4000),
+  explanation: z.string().trim().max(4000),
+  difficulty: z.coerce.number().int().min(1).max(5),
+});
+
+/**
+ * Students write the practice questions. A question taken from a real past
+ * assessment must link that material, and is only accepted if the material
+ * passes the integrity gate (retired, from a finished term).
+ */
+export async function contributeQuestion(courseId: string, _: FormState, form: FormData) {
+  return handle(async () => {
+    const user = await requireUser();
+    await assertCanContribute(user, courseId);
+    const input = QuestionInput.parse({
+      topicId: str(form, "topicId"),
+      type: str(form, "type"),
+      prompt: str(form, "prompt"),
+      explanation: str(form, "explanation"),
+      difficulty: str(form, "difficulty") || "2",
+    });
+    await assertBelongsToCourse(courseId, { topicIds: [input.topicId] });
+
+    let answer: string;
+    let choices: string[] | null = null;
+    if (input.type === "MULTIPLE_CHOICE") {
+      const opts = [0, 1, 2, 3].map((i) => str(form, `choice-${i}`));
+      const filled = opts.filter(Boolean);
+      if (filled.length < 2) throw new UserError("Give at least two options.");
+      if (new Set(filled).size !== filled.length) throw new UserError("Options must be different from each other.");
+      const correctIdx = Number(str(form, "correct"));
+      if (!Number.isInteger(correctIdx) || !opts[correctIdx]) throw new UserError("Mark which option is correct.");
+      answer = opts[correctIdx];
+      choices = shuffle(filled);
+    } else {
+      answer = z.string().trim().min(1, "Give the correct answer.").max(2000).parse(str(form, "answer"));
+      if (input.type === "NUMERIC" && Number.isNaN(Number(answer))) throw new UserError("A numeric answer must be a number.");
+    }
+
+    const sourceMaterialId = optStr(form, "sourceMaterialId");
+    if (sourceMaterialId) {
+      const m = await db.material.findUnique({ where: { id: sourceMaterialId }, include: { offering: { include: { term: true } } } });
+      if (!m || m.courseId !== courseId) throw new UserError("Unknown material.");
+      const gate = assessMaterialGate({ kind: m.kind, assessmentStatus: m.assessmentStatus, termEndsOn: m.offering?.term.endsOn });
+      if (gate.gated) throw new UserError(`Questions from "${m.title}" can't be added yet: ${gate.reason}`);
+    }
+
+    await db.practiceQuestion.create({
+      data: {
+        courseId,
+        topicId: input.topicId,
+        type: input.type,
+        difficulty: input.difficulty,
+        prompt: input.prompt,
+        choices: choices ?? undefined,
+        answer,
+        explanation: input.explanation,
+        origin: sourceMaterialId ? "SOURCED_FROM_MATERIAL" : "COMMUNITY",
+        sourceMaterialId,
+        authorId: user.id,
+      },
+    });
+    revalidatePath(`/courses/${courseId}`, "layout");
+    return { ok: "Question added to the course question bank." };
+  });
 }

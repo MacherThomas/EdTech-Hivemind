@@ -6,6 +6,7 @@ import { createThread } from "../../../actions/chat";
 import { ActionForm } from "@/components/ActionForm";
 import { SubmitButton } from "@/components/SubmitButton";
 import { Notice } from "@/components/Badges";
+import { aiEnabled } from "@/lib/features";
 
 export const metadata = { title: "Chat" };
 
@@ -13,6 +14,7 @@ export default async function ChatPage({ params, searchParams }: { params: Promi
   const { courseId } = await params;
   const { topic, status } = await searchParams;
   const { course, enrolled } = await loadCourse(courseId);
+  const ai = aiEnabled();
   const [threads, materials] = await Promise.all([
     db.chatThread.findMany({
       where: {
@@ -57,7 +59,7 @@ export default async function ChatPage({ params, searchParams }: { params: Promi
         </div>
         {threads.length === 0 ? (
           <Notice title="No questions yet.">
-            This course is new here. Ask the first question: the AI answers right away, and classmates can confirm or correct it.
+            This course is new here. Ask the first question, or answer one when it comes in. Well-voted answers become the course&apos;s knowledge base.
           </Notice>
         ) : (
           <ul className="list-plain">
@@ -98,7 +100,7 @@ export default async function ChatPage({ params, searchParams }: { params: Promi
               <div className="field">
                 <label htmlFor="topicId">Topic (optional)</label>
                 <select id="topicId" name="topicId" defaultValue="">
-                  <option value="">Let the AI suggest one</option>
+                  <option value="">{ai ? "Let the AI suggest one" : "No specific topic"}</option>
                   {course.topics.map((t) => (
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
@@ -115,9 +117,11 @@ export default async function ChatPage({ params, searchParams }: { params: Promi
                 </select>
               </div>
               <SubmitButton pendingLabel="Posting…">Post question</SubmitButton>
-              <p className="small muted" style={{ margin: 0 }}>
-                The AI posts a first answer right away. It uses the course&apos;s community answers where they exist, and is labelled AI-drafted.
-              </p>
+              {ai && (
+                <p className="small muted" style={{ margin: 0 }}>
+                  The AI posts a first answer right away. It uses the course&apos;s community answers where they exist, and is labelled AI-drafted.
+                </p>
+              )}
             </ActionForm>
           </div>
         ) : (

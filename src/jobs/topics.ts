@@ -2,15 +2,17 @@ import { db } from "@/lib/db";
 import { getAI } from "@/lib/ai";
 import { canGroundAI } from "@/lib/integrity";
 import { excerpt } from "@/lib/text";
+import { parseSyllabus } from "@/lib/syllabus";
 
 /**
- * Builds the course topic structure. With a syllabus, topics are SYLLABUS
- * (high confidence); otherwise they're INFERRED from the course name and
- * gate-passing materials and clearly shown as lower confidence.
+ * Builds the course topic structure. With AI off (the default) the syllabus
+ * is parsed deterministically; with no syllabus, students add topics by hand.
+ * With AI on, topics can also be INFERRED from the course name and
+ * gate-passing materials, shown as lower confidence.
  */
 export async function buildTopicStructure({ courseId }: { courseId: string }) {
   const course = await db.course.findUniqueOrThrow({ where: { id: courseId }, include: { topics: true } });
-  const mats = await db.material.findMany({
+  const mats = !getAI() ? [] : await db.material.findMany({
     where: { courseId, moderation: "VISIBLE", extractedText: { not: null } },
     include: { offering: { include: { term: true } } },
     take: 20,
@@ -21,15 +23,20 @@ export async function buildTopicStructure({ courseId }: { courseId: string }) {
     .map((m) => `${m.title}: ${excerpt(m.extractedText ?? "", 1500)}`);
 
   const fromSyllabus = !!course.syllabusText;
-  const drafts = await getAI().extractTopics({
-    courseName: `${course.code} ${course.name}`,
-    courseDescription: course.description,
-    syllabusText: course.syllabusText,
-    materialSnippets: snippets,
-  });
+  const ai = getAI();
+  const drafts = ai
+    ? await ai.extractTopics({
+        courseName: `${course.code} ${course.name}`,
+        courseDescription: course.description,
+        syllabusText: course.syllabusText,
+        materialSnippets: snippets,
+      })
+    : course.syllabusText
+      ? parseSyllabus(course.syllabusText)
+      : [];
 
   const source = fromSyllabus ? "SYLLABUS" : "INFERRED";
-  const confidence = fromSyllabus ? 0.9 : 0.5;
+  const confidence = fromSyllabus ? (ai ? 0.9 : 0.8) : 0.5;
   const byName = new Map(course.topics.map((t) => [t.name.toLowerCase(), t]));
   const ids = new Map<string, string>();
   for (const [position, d] of drafts.entries()) {
@@ -40,11 +47,11 @@ export async function buildTopicStructure({ courseId }: { courseId: string }) {
           // Never downgrade community-added topics; do upgrade inferred → syllabus.
           data: {
             position,
-            summary: existing.summary ?? d.summary,
+            summary: existing.summary ?? d.summary ?? null,
             ...(existing.source === "INFERRED" ? { source, confidence } : {}),
           },
         })
-      : await db.topic.create({ data: { courseId, name: d.name, summary: d.summary, position, source, confidence } });
+      : await db.topic.create({ data: { courseId, name: d.name, summary: d.summary ?? null, position, source, confidence } });
     ids.set(d.name.toLowerCase(), t.id);
   }
   for (const d of drafts) {

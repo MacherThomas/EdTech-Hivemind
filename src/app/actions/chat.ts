@@ -11,6 +11,7 @@ import { assertBelongsToCourse, assertCanContribute } from "@/lib/permissions";
 import { currentOffering } from "@/lib/hivemind";
 import { flagWeight } from "@/lib/reputation";
 import { enqueue, runJob } from "@/jobs";
+import { aiEnabled } from "@/lib/features";
 import { handle, optStr, str, UserError } from "./util";
 import type { FormState } from "@/components/ActionForm";
 
@@ -25,11 +26,12 @@ export async function createThread(courseId: string, _: FormState, form: FormDat
     await assertBelongsToCourse(courseId, { topicIds: [topicId], materialId });
     const enrollment = await db.enrollment.findUnique({ where: { userId_courseId: { userId: user.id, courseId } } });
     const offeringId = enrollment?.offeringId ?? (await currentOffering(courseId))?.id ?? null;
+    const ai = aiEnabled();
     const thread = await db.chatThread.create({
-      data: { courseId, authorId: user.id, title, body, topicId, materialId, offeringId, aiAnswerPending: true },
+      data: { courseId, authorId: user.id, title, body, topicId, materialId, offeringId, aiAnswerPending: ai },
     });
-    // "AI answers first" — runs in the background; the thread page polls until it lands.
-    enqueue("chat.aiAnswer", { threadId: thread.id });
+    // "AI answers first" (only when AI is enabled) runs in the background; the thread page polls until it lands.
+    if (ai) enqueue("chat.aiAnswer", { threadId: thread.id });
     redirect(`/courses/${courseId}/chat/${thread.id}`);
   });
 }
@@ -102,10 +104,12 @@ async function courseOfTarget(targetType: FlagTarget, targetId: string) {
       return (await db.material.findUnique({ where: { id: targetId }, select: { courseId: true } }))?.courseId;
     case "KNOWLEDGE_ENTRY":
       return (await db.knowledgeEntry.findUnique({ where: { id: targetId }, select: { courseId: true } }))?.courseId;
+    case "QUESTION":
+      return (await db.practiceQuestion.findUnique({ where: { id: targetId }, select: { courseId: true } }))?.courseId;
   }
 }
 
-const FLAG_TARGETS: FlagTarget[] = ["THREAD", "MESSAGE", "MATERIAL", "KNOWLEDGE_ENTRY"];
+const FLAG_TARGETS: FlagTarget[] = ["THREAD", "MESSAGE", "MATERIAL", "KNOWLEDGE_ENTRY", "QUESTION"];
 
 export async function flagContent(targetType: FlagTarget, targetId: string, _: FormState, form: FormData) {
   return handle(async () => {
@@ -125,4 +129,20 @@ export async function flagContent(targetType: FlagTarget, targetId: string, _: F
     revalidatePath(`/courses/${courseId}`, "layout");
     return { ok: "Thanks. Flags are reviewed by the course community." };
   });
+}
+
+/** Any enrolled student can tag an untagged thread; promoted answers from it get the same topic. */
+export async function setThreadTopic(threadId: string, form: FormData) {
+  const user = await requireUser();
+  const thread = await db.chatThread.findUniqueOrThrow({ where: { id: threadId } });
+  await assertCanContribute(user, thread.courseId);
+  if (thread.topicId) return;
+  const topicId = optStr(form, "topicId");
+  if (!topicId) return;
+  await assertBelongsToCourse(thread.courseId, { topicIds: [topicId] });
+  await db.$transaction([
+    db.chatThread.update({ where: { id: threadId }, data: { topicId } }),
+    db.knowledgeEntry.updateMany({ where: { promotedFromMessage: { threadId }, topicId: null }, data: { topicId } }),
+  ]);
+  revalidatePath(`/courses/${thread.courseId}`, "layout");
 }

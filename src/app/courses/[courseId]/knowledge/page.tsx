@@ -43,8 +43,8 @@ export default async function KnowledgePage({ params }: { params: Promise<{ cour
       <section className="stack" aria-labelledby="kb-h">
         <h2 id="kb-h">Knowledge base</h2>
         <p className="muted">
-          The course hivemind: answers promoted from chat, explanations written by classmates, and clearly labelled AI drafts.
-          The AI study guide uses these first.
+          The course hivemind: answers promoted from chat and explanations written by classmates. Study sessions show these
+          explanations, and offer a different one after a wrong answer.
         </p>
         {latest.length === 0 && (
           <Notice title="Nothing here yet.">

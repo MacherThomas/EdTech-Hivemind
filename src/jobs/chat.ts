@@ -15,7 +15,12 @@ export async function aiAnswerThread({ threadId }: { threadId: string }) {
     where: { id: threadId },
     include: { course: { include: { topics: { orderBy: { position: "asc" } } } }, material: { include: { offering: { include: { term: true } } } } },
   });
+  const ai = getAI();
   if (!thread) return;
+  if (!ai) {
+    await db.chatThread.update({ where: { id: threadId }, data: { aiAnswerPending: false } });
+    return;
+  }
   try {
     const query = `${thread.title}\n${thread.body}`;
     const offering = thread.offeringId ? { id: thread.offeringId } : await currentOffering(thread.courseId);
@@ -47,7 +52,7 @@ export async function aiAnswerThread({ threadId }: { threadId: string }) {
       .slice(0, 2)
       .map((x) => `${x.m.title}: ${excerpt(x.m.extractedText ?? "", 3000)}`);
 
-    const out = await getAI().answerQuestion({
+    const out = await ai.answerQuestion({
       courseName: `${thread.course.code} ${thread.course.name}`,
       topics: thread.course.topics.map((t) => t.name),
       question: query,

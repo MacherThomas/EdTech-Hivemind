@@ -66,15 +66,14 @@ try {
   await page.waitForSelector("text=Enrolled (self-reported)");
   log("enrolled in ECON-101");
 
-  // 3. AI answers first, grounded on community knowledge
+  // 3. Ask a question (AI is off: no automatic answer)
   await page.fill("#title", "Why is demand more elastic in the long run than short run?");
   await page.fill("#body", "I understand elasticity but not why time matters for demand.");
   await page.click("button:has-text('Post question')");
   await page.waitForURL(/chat\/c/);
-  await page.waitForSelector("text=Study assistant", { timeout: 20000 });
-  const grounded = await page.locator("text=Based on community entries").count();
-  log("AI answer posted; grounded on community entries:", grounded > 0);
-  await shot(page, "02-thread-ai-answer");
+  await page.waitForSelector("text=No answers yet");
+  log("question posted; AI answers present:", await page.locator("text=Study assistant").count());
+  await shot(page, "02-thread-new");
   const threadUrl = page.url();
 
   // Nora adds her own answer; three classmates upvote it → auto-promotion
@@ -92,6 +91,10 @@ try {
   const promoted = await page.locator("article", { hasText: "public transport" }).locator("text=Added to the study guide").count();
   log("Nora's answer promoted to knowledge base after 3 upvotes:", promoted > 0);
   await shot(page, "03-thread-promoted");
+  await page.selectOption("#set-topic", { label: "Elasticity" });
+  await page.click("button:has-text('Set topic')");
+  await page.waitForSelector("article .badge:has-text('Elasticity')");
+  log("thread tagged with topic after posting: Elasticity");
 
   // 4. Integrity: question about a possibly-live problem set
   await page.goto(threadUrl.replace(/\/chat\/.*/, "/chat"));
@@ -99,9 +102,8 @@ try {
   await page.fill("#body", "It's due Friday, what is the answer for the monopolist output?");
   await page.selectOption("#materialId", { label: "Problem set 3" });
   await page.click("button:has-text('Post question')");
-  await page.waitForSelector("text=Study assistant", { timeout: 20000 });
-  const note = await page.locator(".message-ai .notice-warning").first().textContent();
-  log("integrity note on live-assignment question:", note?.trim().slice(0, 110));
+  await page.waitForURL(/chat\/c/);
+  log("live-material badge on thread:", (await page.locator(".badge-gated").first().textContent())?.trim());
   await shot(page, "04-integrity-note");
 
   // 5. Materials
@@ -131,21 +133,44 @@ try {
   const n = await qs.count();
   for (let i = 0; i < n; i++) {
     const q = qs.nth(i);
-    if (await q.locator("input[type=radio]").count()) {
-      await q.locator("input[type=radio]").last().check(); // pick a (likely) wrong option
+    if (await q.locator("input[type=radio][name=response]").count()) {
+      // Pick an option that isn't the correct one where we can tell; otherwise the last.
+      const radios = q.locator("input[type=radio][name=response]");
+      const wrong = await radios.evaluateAll((els) => els.findIndex((e) => !/falls \(movement|shifts right: price and quantity rise|^Elastic$/.test(e.value)));
+      await radios.nth(Math.max(0, wrong)).check();
+      await q.locator("button:has-text('Check answer')").click();
+    } else if (await q.locator("textarea").count()) {
+      await q.locator("textarea").fill("no idea");
+      await q.locator("button:has-text('Show model answer')").click();
+      await q.locator("button:has-text('No, not quite')").click();
     } else {
-      await q.locator("textarea, input[type=text]").first().fill("no idea");
+      await q.locator("input[type=text]").first().fill("7");
+      await q.locator("button:has-text('Check answer')").click();
     }
-    await q.locator("button:has-text('Check answer')").click();
     await q.locator(".notice").first().waitFor();
   }
   const reteach = await page.locator("text=Here's another way to think about it").count();
-  log(`answered ${n} questions; re-teach explanations shown:`, reteach);
+  const noAlt = await page.locator("text=No other explanation of this topic yet").count();
+  log(`answered ${n} questions (self-marked written ones); community re-teach shown: ${reteach}, 'ask in chat' fallback: ${noAlt}`);
   await shot(page, "07-session");
   await page.click("button:has-text('Finish session')");
   await page.waitForURL(/adapted=1/);
   log("after adaptation, session kinds:", (await page.locator(".timeline .badge").allTextContents()).join(", "));
   await shot(page, "08-plan-adapted");
+
+  // 6b. Contribute a practice question to the bank
+  await page.goto(`${courseBase}/guide`);
+  const before = (await page.locator("text=/\\d+ in the question bank/").textContent()).trim();
+  await page.selectOption("#qf-topic", { label: "Monopoly" });
+  await page.fill("#qf-prompt", "Why does a monopolist produce less than a competitive market?");
+  await page.fill("#qf-choice-0", "Because marginal revenue is below price");
+  await page.fill("#qf-choice-1", "Because it has higher costs");
+  await page.check("#qf-correct-0");
+  await page.fill("#qf-explanation", "MR < P, so profit is maximised at a lower output.");
+  await page.click("button:has-text('Add question')");
+  await page.waitForSelector("text=Question added");
+  await page.reload();
+  log("question bank:", before, "→", (await page.locator("text=/\\d+ in the question bank/").textContent()).trim());
 
   // 7. Tutors + booking
   await page.goto(`${courseBase}/tutors`);

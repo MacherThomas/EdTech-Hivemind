@@ -38,6 +38,11 @@ export async function reviewFlags({ targetType, targetId }: { targetType: FlagTa
       author = { userId: m.uploaderId, courseId: m.courseId };
       break;
     }
+    case "QUESTION": {
+      const q = await db.practiceQuestion.update({ where: { id: targetId }, data: { moderation } });
+      author = { userId: q.authorId, courseId: q.courseId };
+      break;
+    }
     case "KNOWLEDGE_ENTRY": {
       const status = (["ACTIVE", "FLAGGED", "DEPRECATED"] as const)[level];
       const e = await db.knowledgeEntry.update({ where: { id: targetId }, data: { status } });

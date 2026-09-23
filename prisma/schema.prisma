@@ -56,6 +56,7 @@ enum FlagTarget {
   MESSAGE
   MATERIAL
   KNOWLEDGE_ENTRY
+  QUESTION
 }
 
 enum TopicSource {
@@ -220,6 +221,7 @@ model User {
   tutorProfile      TutorProfile?
   tutoringAsStudent TutoringSession[]    @relation("TutoringStudent")
   createdTopics     Topic[]
+  questions         PracticeQuestion[]   @relation("QuestionAuthor")
 }
 
 /// One-time sign-in / verification codes. Rows are deleted on use or expiry,
@@ -590,11 +592,11 @@ model StudySessionTopic {
 }
 
 model PracticeQuestion {
-  id               String         @id @default(cuid())
+  id               String          @id @default(cuid())
   courseId         String
-  course           Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course           Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   topicId          String
-  topic            Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  topic            Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
   type             QuestionType
   /// Intended difficulty 1..5; compare with QuestionAggregate for calibration.
   difficulty       Int
@@ -605,8 +607,12 @@ model PracticeQuestion {
   explanation      String
   origin           QuestionOrigin
   sourceMaterialId String?
-  sourceMaterial   Material?      @relation(fields: [sourceMaterialId], references: [id])
-  createdAt        DateTime       @default(now())
+  sourceMaterial   Material?       @relation(fields: [sourceMaterialId], references: [id])
+  /// Student who wrote it (COMMUNITY / SOURCED_FROM_MATERIAL); null for AI questions.
+  authorId         String?
+  author           User?           @relation("QuestionAuthor", fields: [authorId], references: [id])
+  moderation       ModerationState @default(VISIBLE)
+  createdAt        DateTime        @default(now())
 
   sessions  StudySessionQuestion[]
   attempts  PerformanceRecord[]

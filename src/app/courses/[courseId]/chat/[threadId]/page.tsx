@@ -5,7 +5,7 @@ import { config } from "@/lib/config";
 import { timeAgo } from "@/lib/format";
 import { assessMaterialGate } from "@/lib/integrity";
 import { loadCourse } from "../../data";
-import { flagContent, markResolved, reply, vote } from "../../../../actions/chat";
+import { flagContent, markResolved, reply, setThreadTopic, vote } from "../../../../actions/chat";
 import { ActionForm } from "@/components/ActionForm";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { GateBadge, Notice, OriginBadge } from "@/components/Badges";
@@ -13,7 +13,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function ThreadPage({ params }: { params: Promise<{ courseId: string; threadId: string }> }) {
   const { courseId, threadId } = await params;
-  const { user, enrolled } = await loadCourse(courseId);
+  const { user, enrolled, course } = await loadCourse(courseId);
   const thread = await db.chatThread.findUnique({
     where: { id: threadId },
     include: {
@@ -66,6 +66,16 @@ export default async function ThreadPage({ params }: { params: Promise<{ courseI
             {gate?.gated && <GateBadge reason={gate.reason} uncertain={gate.certainty === "uncertain"} />}
           </p>
         )}
+        {!thread.topic && enrolled && course.topics.length > 0 && (
+          <form action={setThreadTopic.bind(null, thread.id)} className="cluster">
+            <label htmlFor="set-topic" className="small">Which topic is this about?</label>
+            <select id="set-topic" name="topicId" defaultValue="" style={{ width: "auto" }} required>
+              <option value="" disabled>Choose a topic</option>
+              {course.topics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <SubmitButton small variant="secondary">Set topic</SubmitButton>
+          </form>
+        )}
         {thread.moderation === "FLAGGED" && <Notice kind="warning">Community members flagged this thread. Read with care.</Notice>}
       </article>
 
@@ -73,6 +83,9 @@ export default async function ThreadPage({ params }: { params: Promise<{ courseI
         <h3 id="answers-h">{messages.length} {messages.length === 1 ? "answer" : "answers"}</h3>
         {thread.aiAnswerPending && (
           <Notice title="The AI is drafting a first answer…">It&apos;ll appear here in a moment. Classmates can then confirm or correct it.</Notice>
+        )}
+        {messages.length === 0 && !thread.aiAnswerPending && (
+          <p className="muted">No answers yet. Know the answer? Write it below.</p>
         )}
         {messages.map((m) => {
           const my = m.votes[0]?.value ?? 0;

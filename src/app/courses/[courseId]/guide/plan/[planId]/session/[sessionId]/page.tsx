@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { groundingEntries } from "@/lib/hivemind";
 import { ensureSessionQuestions } from "@/lib/study/service";
+import { retiredAssessments } from "@/lib/questions";
+import { flagContent } from "../../../../../../../actions/chat";
+import { ActionForm } from "@/components/ActionForm";
+import { QuestionForm } from "@/components/QuestionForm";
 import { loadCourse } from "../../../../../data";
 import { finishSession } from "../../../../../../../actions/guide";
 import { Notice, OriginBadge } from "@/components/Badges";
@@ -11,7 +15,7 @@ import { AnswerForm } from "./AnswerForm";
 
 export default async function SessionPage({ params }: { params: Promise<{ courseId: string; planId: string; sessionId: string }> }) {
   const { courseId, planId, sessionId } = await params;
-  const { user } = await loadCourse(courseId);
+  const { user, enrolled } = await loadCourse(courseId);
   const base = await db.studySession.findUnique({ where: { id: sessionId }, include: { plan: true } });
   if (!base || base.planId !== planId || base.plan.userId !== user.id) notFound();
 
@@ -20,12 +24,20 @@ export default async function SessionPage({ params }: { params: Promise<{ course
     where: { id: sessionId },
     include: {
       topics: { include: { topic: true } },
-      questions: { include: { question: { include: { sourceMaterial: { select: { title: true } } } } }, orderBy: { position: "asc" } },
+      questions: {
+        where: { question: { moderation: { not: "HIDDEN" } } },
+        include: { question: { include: { sourceMaterial: { select: { title: true } } } } },
+        orderBy: { position: "asc" },
+      },
       attempts: { orderBy: { answeredAt: "desc" } },
     },
   });
 
-  // Explanations: community knowledge first; flagged as AI-only when none exists.
+  const withQuestions = new Set(session.questions.map((q) => q.question.topicId));
+  const empty = session.topics.filter(({ topic }) => !withQuestions.has(topic.id)).map(({ topic }) => topic);
+  const retired = empty.length && enrolled ? await retiredAssessments(courseId) : [];
+
+  // Explanations from the course knowledge base.
   const explanations = await Promise.all(
     session.topics.map(async ({ topic }) => ({
       topic,
@@ -71,7 +83,21 @@ export default async function SessionPage({ params }: { params: Promise<{ course
 
       <section aria-labelledby="practice-h" className="stack-s">
         <h3 id="practice-h">Practice</h3>
-        {session.questions.length === 0 && <Notice kind="warning">No questions could be prepared for this session.</Notice>}
+        {empty.map((t) => (
+          <div key={t.id} className="card stack-s">
+            <Notice kind="info" title={`No practice questions for ${t.name} yet.`}>
+              The question bank is written by students. {enrolled ? "Add one below, and it'll count for everyone who studies this topic." : "Enrolled students can add them."}
+            </Notice>
+            {enrolled && (
+              <details>
+                <summary className="btn btn-secondary btn-small">Write a question for {t.name}</summary>
+                <div style={{ marginTop: 12 }}>
+                  <QuestionForm courseId={courseId} topics={[]} fixedTopicId={t.id} retiredMaterials={retired} idPrefix={`qf-${t.id}`} />
+                </div>
+              </details>
+            )}
+          </div>
+        ))}
         <ol className="stack">
           {session.questions.map(({ question: q }) => {
             const prev = session.attempts.find((a) => a.questionId === q.id);
@@ -84,15 +110,29 @@ export default async function SessionPage({ params }: { params: Promise<{ course
                   )}
                   {q.origin === "COMMUNITY" && <span className="badge badge-community">Written by a student</span>}
                   <span className="badge">Difficulty {q.difficulty}/5</span>
+                  {q.moderation === "FLAGGED" && <span className="badge badge-gated"><span aria-hidden="true">⚑</span> Flagged as possibly wrong</span>}
                 </div>
                 <p className="prose" style={{ margin: 0 }}>{q.prompt}</p>
                 <AnswerForm
+                  courseId={courseId}
                   sessionId={session.id}
                   questionId={q.id}
                   type={q.type}
                   choices={Array.isArray(q.choices) ? (q.choices as string[]) : null}
-                  previous={prev ? { correct: prev.correct, response: prev.response, answer: q.answer, explanation: q.explanation } : null}
+                  previous={prev ? { correct: prev.correct, answer: q.answer, explanation: q.explanation } : null}
                 />
+                {enrolled && (
+                  <details>
+                    <summary className="btn btn-ghost btn-small">⚑ Flag this question</summary>
+                    <ActionForm action={flagContent.bind(null, "QUESTION", q.id)} className="stack-s">
+                      <div className="field">
+                        <label htmlFor={`flag-${q.id}`}>What&apos;s wrong with it?</label>
+                        <input id={`flag-${q.id}`} name="reason" type="text" required minLength={3} maxLength={500} />
+                      </div>
+                      <SubmitButton small variant="secondary">Submit flag</SubmitButton>
+                    </ActionForm>
+                  </details>
+                )}
               </li>
             );
           })}

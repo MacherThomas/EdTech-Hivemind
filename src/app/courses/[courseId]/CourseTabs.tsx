@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { slug: "chat", label: "Chat" },
-  { slug: "guide", label: "AI study guide" },
+  { slug: "guide", label: "Study guide" },
   { slug: "materials", label: "Materials" },
   { slug: "tutors", label: "Tutors" },
   { slug: "knowledge", label: "Knowledge base" },

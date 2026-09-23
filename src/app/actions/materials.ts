@@ -47,9 +47,10 @@ export async function uploadMaterial(courseId: string, _: FormState, form: FormD
     const storageKey = await putObject(buf, file.name);
 
     let suggested = false;
-    if (topicIds.length === 0 && extractedText) {
+    const ai = getAI();
+    if (ai && topicIds.length === 0 && extractedText) {
       const topics = await db.topic.findMany({ where: { courseId } });
-      const names = await getAI().suggestTopicTags({ title, text: extractedText, topics: topics.map((t) => t.name) });
+      const names = await ai.suggestTopicTags({ title, text: extractedText, topics: topics.map((t) => t.name) });
       topicIds = topics.filter((t) => names.includes(t.name)).map((t) => t.id);
       suggested = topicIds.length > 0;
     }
@@ -92,8 +93,9 @@ export async function uploadMaterial(courseId: string, _: FormState, form: FormD
     }
     if (suggested) msg += " Topics were suggested by the AI from the file's text. Please check them.";
     if (!canGroundAI({ kind, assessmentStatus, termEndsOn: material.offering?.term.endsOn })) {
-      msg += " Because it may still be graded, the AI won't use it for solutions.";
+      msg += " Because it may still be graded, it's marked as possibly live.";
     }
+    if (topicIds.length === 0) msg += " Tip: tag it with topics so classmates can find it.";
     revalidatePath(`/courses/${courseId}/materials`);
     return { ok: msg };
   });

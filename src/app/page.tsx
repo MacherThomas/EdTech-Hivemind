@@ -79,7 +79,7 @@ export default async function Home() {
             <section aria-labelledby="study" className="stack-s">
               <h2 id="study">Study plans</h2>
               {plans.length === 0 ? (
-                <p className="muted">No active study plans. Open a course&apos;s AI study guide and set an exam date to get one.</p>
+                <p className="muted">No active study plans. Open a course&apos;s study guide and set an exam date to get one.</p>
               ) : (
                 <ul className="list-plain">
                   {plans.map((p) => (

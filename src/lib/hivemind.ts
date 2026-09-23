@@ -43,7 +43,7 @@ export async function groundingEntries(
     topicId?: string | null;
     offeringId?: string | null;
     limit?: number;
-    /** Only entries tagged with `topicId` (or untagged) — for topic-scoped views like study sessions. */
+    /** Only entries tagged with exactly `topicId` — for topic-scoped views like study sessions. */
     topicOnly?: boolean;
   } = {},
 ) {
@@ -55,7 +55,7 @@ export async function groundingEntries(
   });
   return entries
     .filter((e) => !entryGate(e).gated && appliesToOffering(e, opts.offeringId ?? null))
-    .filter((e) => !opts.topicOnly || !e.topicId || e.topicId === opts.topicId)
+    .filter((e) => !opts.topicOnly || e.topicId === opts.topicId)
     .map((e) => {
       let s = overlapScore(query, `${e.title} ${e.body}`);
       if (opts.topicId && e.topicId === opts.topicId) s += 0.5;

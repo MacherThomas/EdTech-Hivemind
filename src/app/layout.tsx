@@ -44,8 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </main>
         <footer className="site-footer">
           <div className="container small muted">
-            Student-run study spaces. Content is written by students and labelled AI-drafted where the AI wrote it. Not an official
-            channel for grades or academic records.
+            Student-run study spaces. Content is written by students. Not an official channel for grades or academic records.
           </div>
         </footer>
       </body>
