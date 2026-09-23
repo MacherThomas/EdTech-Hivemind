@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { config } from "@/lib/config";
 import { requireUser } from "@/lib/auth/session";
-import { assertCanContribute, canViewCourse } from "@/lib/permissions";
+import { assertBelongsToCourse, assertCanContribute } from "@/lib/permissions";
 import { currentOffering } from "@/lib/hivemind";
 import { flagWeight } from "@/lib/reputation";
 import { enqueue, runJob } from "@/jobs";
@@ -22,6 +22,7 @@ export async function createThread(courseId: string, _: FormState, form: FormDat
     const body = z.string().trim().min(10, "Add a bit more detail (10+ characters).").max(8000).parse(str(form, "body"));
     const topicId = optStr(form, "topicId");
     const materialId = optStr(form, "materialId");
+    await assertBelongsToCourse(courseId, { topicIds: [topicId], materialId });
     const enrollment = await db.enrollment.findUnique({ where: { userId_courseId: { userId: user.id, courseId } } });
     const offeringId = enrollment?.offeringId ?? (await currentOffering(courseId))?.id ?? null;
     const thread = await db.chatThread.create({
@@ -49,7 +50,8 @@ export async function reply(threadId: string, _: FormState, form: FormData) {
   });
 }
 
-export async function vote(messageId: string, value: 1 | -1) {
+export async function vote(messageId: string, rawValue: number) {
+  const value = rawValue > 0 ? 1 : -1; // bound args are client-controlled
   const user = await requireUser();
   const msg = await db.chatMessage.findUniqueOrThrow({ where: { id: messageId }, include: { thread: true } });
   await assertCanContribute(user, msg.thread.courseId);
@@ -89,10 +91,28 @@ export async function markResolved(threadId: string, messageId: string) {
   revalidatePath(`/courses/${thread.courseId}/chat/${threadId}`);
 }
 
-export async function flagContent(targetType: FlagTarget, targetId: string, courseId: string, path: string, _: FormState, form: FormData) {
+/** Resolves the course from the target itself — never from a client-supplied id. */
+async function courseOfTarget(targetType: FlagTarget, targetId: string) {
+  switch (targetType) {
+    case "MESSAGE":
+      return (await db.chatMessage.findUnique({ where: { id: targetId }, select: { thread: { select: { courseId: true } } } }))?.thread.courseId;
+    case "THREAD":
+      return (await db.chatThread.findUnique({ where: { id: targetId }, select: { courseId: true } }))?.courseId;
+    case "MATERIAL":
+      return (await db.material.findUnique({ where: { id: targetId }, select: { courseId: true } }))?.courseId;
+    case "KNOWLEDGE_ENTRY":
+      return (await db.knowledgeEntry.findUnique({ where: { id: targetId }, select: { courseId: true } }))?.courseId;
+  }
+}
+
+const FLAG_TARGETS: FlagTarget[] = ["THREAD", "MESSAGE", "MATERIAL", "KNOWLEDGE_ENTRY"];
+
+export async function flagContent(targetType: FlagTarget, targetId: string, _: FormState, form: FormData) {
   return handle(async () => {
     const user = await requireUser();
-    if (!(await canViewCourse(user, courseId))) throw new UserError("Not found.");
+    if (!FLAG_TARGETS.includes(targetType)) throw new UserError("Not found.");
+    const courseId = await courseOfTarget(targetType, targetId);
+    if (!courseId) throw new UserError("Not found.");
     await assertCanContribute(user, courseId);
     const reason = z.string().trim().min(3, "Say briefly what's wrong.").max(500).parse(str(form, "reason"));
     const rep = await db.courseReputation.findUnique({ where: { userId_courseId: { userId: user.id, courseId } } });
@@ -102,7 +122,7 @@ export async function flagContent(targetType: FlagTarget, targetId: string, cour
       update: { reason },
     });
     await runJob("moderation.reviewFlags", { targetType, targetId });
-    revalidatePath(path);
+    revalidatePath(`/courses/${courseId}`, "layout");
     return { ok: "Thanks. Flags are reviewed by the course community." };
   });
 }

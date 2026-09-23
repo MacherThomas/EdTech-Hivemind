@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { config } from "@/lib/config";
 import { requireUser } from "@/lib/auth/session";
-import { assertCanContribute } from "@/lib/permissions";
+import { assertBelongsToCourse, assertCanContribute } from "@/lib/permissions";
 import { putObject } from "@/lib/storage";
 import { getAI } from "@/lib/ai";
 import { canGroundAI } from "@/lib/integrity";
@@ -40,6 +40,7 @@ export async function uploadMaterial(courseId: string, _: FormState, form: FormD
     const offeringId = optStr(form, "offeringId");
     const professorName = optStr(form, "professor");
     let topicIds = form.getAll("topicIds").map(String).filter(Boolean);
+    await assertBelongsToCourse(courseId, { topicIds, offeringId });
 
     const buf = Buffer.from(await file.arrayBuffer());
     const extractedText = TEXT_TYPES.includes(mime) ? buf.toString("utf8").slice(0, 200_000) : null;
@@ -98,11 +99,17 @@ export async function uploadMaterial(courseId: string, _: FormState, form: FormD
   });
 }
 
-/** Any enrolled student can correct a material's integrity tag toward "possibly live" (safer); retiring needs the uploader. */
+/**
+ * Any enrolled student can move an assessment toward "possibly live" (the
+ * safer direction). Only the uploader can mark it retired. Nobody can
+ * reclassify an assessment as "not an assessment" — that would lift the gate.
+ */
 export async function updateMaterialStatus(materialId: string, status: AssessmentStatus) {
   const user = await requireUser();
   const m = await db.material.findUniqueOrThrow({ where: { id: materialId } });
   await assertCanContribute(user, m.courseId);
+  if (!ASSESSMENT_KINDS.includes(m.kind)) return;
+  if (status !== "POSSIBLY_LIVE" && status !== "RETIRED") return;
   if (status === "RETIRED" && m.uploaderId !== user.id) return;
   await db.material.update({ where: { id: materialId }, data: { assessmentStatus: status } });
   revalidatePath(`/courses/${m.courseId}/materials`);

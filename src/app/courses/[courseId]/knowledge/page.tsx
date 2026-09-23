@@ -37,7 +37,6 @@ export default async function KnowledgePage({ params }: { params: Promise<{ cour
     const k = e.topic?.name ?? "General";
     byTopic.set(k, [...(byTopic.get(k) ?? []), e]);
   }
-  const path = `/courses/${courseId}/knowledge`;
 
   return (
     <div className="two-col">
@@ -97,7 +96,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ cour
                         </details>
                         <details>
                           <summary className="btn btn-ghost btn-small">⚑ Flag as wrong or outdated</summary>
-                          <ActionForm action={flagContent.bind(null, "KNOWLEDGE_ENTRY", e.id, courseId, path)} className="stack-s">
+                          <ActionForm action={flagContent.bind(null, "KNOWLEDGE_ENTRY", e.id)} className="stack-s">
                             <div className="field">
                               <label htmlFor={`flag-${e.id}`}>What&apos;s wrong?</label>
                               <input id={`flag-${e.id}`} name="reason" type="text" required minLength={3} />

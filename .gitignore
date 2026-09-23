@@ -6,3 +6,4 @@ uploads/
 .env.local
 *.tsbuildinfo
 next-env.d.ts
+e2e-out/

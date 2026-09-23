@@ -29,7 +29,7 @@ export default async function SessionPage({ params }: { params: Promise<{ course
   const explanations = await Promise.all(
     session.topics.map(async ({ topic }) => ({
       topic,
-      entries: await groundingEntries(courseId, `${topic.name} ${topic.summary ?? ""}`, { topicId: topic.id, limit: 2 }),
+      entries: await groundingEntries(courseId, `${topic.name} ${topic.summary ?? ""}`, { topicId: topic.id, limit: 2, topicOnly: true }),
     })),
   );
   const shownIds = explanations.flatMap((e) => e.entries.map((x) => x.id));

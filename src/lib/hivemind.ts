@@ -39,7 +39,13 @@ export function appliesToOffering(e: { stability: KnowledgeStability; offeringId
 export async function groundingEntries(
   courseId: string,
   query: string,
-  opts: { topicId?: string | null; offeringId?: string | null; limit?: number } = {},
+  opts: {
+    topicId?: string | null;
+    offeringId?: string | null;
+    limit?: number;
+    /** Only entries tagged with `topicId` (or untagged) — for topic-scoped views like study sessions. */
+    topicOnly?: boolean;
+  } = {},
 ) {
   const entries = await db.knowledgeEntry.findMany({
     where: { courseId, status: "ACTIVE", supersededBy: null },
@@ -49,6 +55,7 @@ export async function groundingEntries(
   });
   return entries
     .filter((e) => !entryGate(e).gated && appliesToOffering(e, opts.offeringId ?? null))
+    .filter((e) => !opts.topicOnly || !e.topicId || e.topicId === opts.topicId)
     .map((e) => {
       let s = overlapScore(query, `${e.title} ${e.body}`);
       if (opts.topicId && e.topicId === opts.topicId) s += 0.5;

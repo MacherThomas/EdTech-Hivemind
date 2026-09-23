@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
-import { canViewCourse } from "@/lib/permissions";
+import { assertBelongsToCourse, assertTermInSchool, canViewCourse } from "@/lib/permissions";
 import { handle, optStr, str, UserError } from "./util";
 import type { FormState } from "@/components/ActionForm";
 
@@ -24,6 +24,7 @@ export async function createCourse(_: FormState, form: FormData) {
     if (exists) throw new UserError(`${input.code} already exists. Search for it and add it to your courses.`);
 
     const termId = optStr(form, "termId");
+    if (termId) await assertTermInSchool(termId, user.schoolId);
     const professors = str(form, "professors").split(",").map((p) => p.trim()).filter(Boolean).slice(0, 5);
     const course = await db.course.create({ data: { ...input, schoolId: user.schoolId } });
     let offeringId: string | null = null;
@@ -51,6 +52,7 @@ export async function enroll(courseId: string, form: FormData) {
   const user = await requireUser();
   if (!(await canViewCourse(user, courseId))) return;
   const offeringId = optStr(form, "offeringId");
+  if (offeringId) await assertBelongsToCourse(courseId, { offeringId });
   await db.enrollment.upsert({
     where: { userId_courseId: { userId: user.id, courseId } },
     create: { userId: user.id, courseId, offeringId },
@@ -71,6 +73,7 @@ export async function addOffering(courseId: string, _: FormState, form: FormData
     if (!(await canViewCourse(user, courseId))) throw new UserError("Course not found.");
     const termId = str(form, "termId");
     if (!termId) throw new UserError("Pick a term.");
+    await assertTermInSchool(termId, user.schoolId);
     const professors = str(form, "professors").split(",").map((p) => p.trim()).filter(Boolean).slice(0, 5);
     const existing = await db.courseOffering.findUnique({ where: { courseId_termId: { courseId, termId } } });
     if (existing) throw new UserError("That term is already listed for this course.");

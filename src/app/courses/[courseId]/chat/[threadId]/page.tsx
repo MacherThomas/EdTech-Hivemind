@@ -47,7 +47,6 @@ export default async function ThreadPage({ params }: { params: Promise<{ courseI
     if (b.id === thread.resolvedMessageId) return 1;
     return b.score - a.score || a.createdAt.getTime() - b.createdAt.getTime();
   });
-  const path = `/courses/${courseId}/chat/${threadId}`;
 
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
@@ -112,26 +111,26 @@ export default async function ThreadPage({ params }: { params: Promise<{ courseI
               <div className="cluster" style={{ marginTop: 8 }}>
                 <span className="vote">
                   <form action={vote.bind(null, m.id, 1)}>
-                    <button className="btn btn-ghost btn-small" type="submit" aria-pressed={my === 1} disabled={!enrolled || m.author?.id === user.id} aria-label={isAI ? "Confirm: this is correct" : "Upvote"}>
-                      ▲ {isAI ? "Confirm" : "Helpful"}
+                    <button className="btn btn-ghost btn-small" type="submit" aria-pressed={my === 1} disabled={!enrolled || m.author?.id === user.id}>
+                      <span aria-hidden="true">▲</span> {isAI ? "Confirm" : "Helpful"}
                     </button>
                   </form>
-                  <span className="score" aria-label={`Score ${m.score}`}>{m.score}</span>
+                  <span className="score"><span className="visually-hidden">Score </span>{m.score}</span>
                   <form action={vote.bind(null, m.id, -1)}>
-                    <button className="btn btn-ghost btn-small" type="submit" aria-pressed={my === -1} disabled={!enrolled || m.author?.id === user.id} aria-label="Downvote">
-                      ▼ {isAI ? "Not right" : "Not helpful"}
+                    <button className="btn btn-ghost btn-small" type="submit" aria-pressed={my === -1} disabled={!enrolled || m.author?.id === user.id}>
+                      <span aria-hidden="true">▼</span> {isAI ? "Not right" : "Not helpful"}
                     </button>
                   </form>
                 </span>
                 {canResolve && m.id !== thread.resolvedMessageId && (
                   <form action={markResolved.bind(null, thread.id, m.id)}>
-                    <button type="submit" className="btn btn-ghost btn-small">✓ Mark as resolving answer</button>
+                    <button type="submit" className="btn btn-ghost btn-small"><span aria-hidden="true">✓</span> Mark as resolving answer</button>
                   </form>
                 )}
                 {enrolled && (
                   <details>
                     <summary className="btn btn-ghost btn-small">⚑ Flag</summary>
-                    <ActionForm action={flagContent.bind(null, "MESSAGE", m.id, courseId, path)} className="stack-s">
+                    <ActionForm action={flagContent.bind(null, "MESSAGE", m.id)} className="stack-s">
                       <div className="field">
                         <label htmlFor={`flag-${m.id}`}>What&apos;s wrong?</label>
                         <input id={`flag-${m.id}`} name="reason" type="text" required minLength={3} maxLength={500} />

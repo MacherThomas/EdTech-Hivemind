@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { config } from "@/lib/config";
 import { requireUser } from "@/lib/auth/session";
-import { assertCanContribute } from "@/lib/permissions";
+import { assertBelongsToCourse, assertCanContribute } from "@/lib/permissions";
 import { validateEntryVersioning } from "@/lib/hivemind";
 import { runJob } from "@/jobs";
 import { handle, optStr, str, UserError } from "./util";
@@ -25,6 +25,7 @@ export async function contributeEntry(courseId: string, _: FormState, form: Form
     await assertCanContribute(user, courseId);
     const input = EntryInput.parse({ title: str(form, "title"), body: str(form, "body"), stability: str(form, "stability") || "TERM_STABLE" });
     const offeringId = optStr(form, "offeringId");
+    await assertBelongsToCourse(courseId, { topicIds: [optStr(form, "topicId")], offeringId });
     validateEntryVersioning({ stability: input.stability as KnowledgeStability, offeringId });
     const rep = await db.courseReputation.findUnique({ where: { userId_courseId: { userId: user.id, courseId } } });
     const trusted = (rep?.score ?? 0) >= config.promotion.trustedResolverReputation;

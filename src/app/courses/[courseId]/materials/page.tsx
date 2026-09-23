@@ -146,7 +146,7 @@ export default async function MaterialsPage({
                       {enrolled && (
                         <details>
                           <summary className="btn btn-ghost btn-small">⚑ Flag</summary>
-                          <ActionForm action={flagContent.bind(null, "MATERIAL", m.id, courseId, path)} className="stack-s">
+                          <ActionForm action={flagContent.bind(null, "MATERIAL", m.id)} className="stack-s">
                             <div className="field">
                               <label htmlFor={`flag-${m.id}`}>What&apos;s wrong?</label>
                               <input id={`flag-${m.id}`} name="reason" type="text" required minLength={3} />

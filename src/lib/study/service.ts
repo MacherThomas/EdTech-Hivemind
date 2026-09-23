@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { randomInt } from "crypto";
 import { db } from "../db";
 import { getAI } from "../ai";
 import { config } from "../config";
@@ -58,6 +59,15 @@ export async function createStudyPlan(input: {
   });
 }
 
+function shuffle<T>(xs: T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 const EXPECTED_ACCURACY: Record<number, number> = { 1: 0.9, 2: 0.75, 3: 0.6, 4: 0.45, 5: 0.3 };
 
 /** A question is miscalibrated when the observed accuracy (≥ cohort) is far from its intended difficulty. */
@@ -104,7 +114,7 @@ export async function ensureSessionQuestions(sessionId: string, userId: string) 
     const picked = usable.slice(0, perTopic).map((q) => q.id);
 
     if (picked.length < perTopic) {
-      const entries = await groundingEntries(course.id, `${topic.name} ${topic.summary ?? ""}`, { topicId: topic.id, limit: 3 });
+      const entries = await groundingEntries(course.id, `${topic.name} ${topic.summary ?? ""}`, { topicId: topic.id, limit: 3, topicOnly: true });
       const retired = await db.material.findMany({
         where: { courseId: course.id, topics: { some: { id: topic.id } }, assessmentStatus: "RETIRED", extractedText: { not: null }, moderation: "VISIBLE" },
         include: { offering: { include: { term: true } } },
@@ -129,7 +139,8 @@ export async function ensureSessionQuestions(sessionId: string, userId: string) 
             type: d.type,
             difficulty: d.difficulty,
             prompt: d.prompt,
-            choices: d.choices ? (d.choices as Prisma.InputJsonValue) : undefined,
+            // Shuffle so the correct option's position carries no signal, whatever the generator did.
+            choices: d.choices ? (shuffle(d.choices) as Prisma.InputJsonValue) : undefined,
             answer: d.answer,
             explanation: d.explanation,
             origin: "AI_ORIGINAL",

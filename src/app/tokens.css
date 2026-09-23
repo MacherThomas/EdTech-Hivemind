@@ -88,3 +88,12 @@
   --radius-s: 4px; --radius-m: 8px;
   --content-max: 1120px;
 }
+
+/* Narrow screens: smaller headings so long words reflow at 320px (WCAG 1.4.10). */
+@media (max-width: 600px) {
+  :root {
+    --type-h1-size: 28px; --type-h1-lh: 34px;
+    --type-h2-size: 22px; --type-h2-lh: 28px;
+    --type-h3-size: 18px; --type-h3-lh: 24px;
+  }
+}
