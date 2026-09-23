@@ -17,7 +17,7 @@ SEED_DEMO=1 npm run db:seed      # optional: fictional ECON-101 demo content
 npm run dev
 ```
 
-Sign in at http://localhost:3000/signin with any address on an allowlisted domain (e.g. `you@student.ie.edu`). With `EMAIL_TRANSPORT=console`, the 6-digit code is printed in the server log. Demo accounts are `demo.ana@student.ie.edu` … `demo.farah@student.ie.edu`; Ana has earned tutor status in ECON-101.
+Sign in at http://localhost:3000/signin with any address on an allowlisted domain (students only: `you@student.ie.edu`). With `EMAIL_TRANSPORT=console`, the 6-digit code is printed in the server log. Demo accounts are `demo.ana@student.ie.edu` … `demo.farah@student.ie.edu`; Ana has earned tutor status in ECON-101.
 
 Without `ANTHROPIC_API_KEY` the app uses a deterministic offline AI stub, so every flow works locally. Set the key to use Claude (`AI_MODEL`, default `claude-opus-5`).
 

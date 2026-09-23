@@ -17,9 +17,13 @@ async function main() {
     update: {},
     create: { slug: "ie-university", name: "IE University", timezone: "Europe/Madrid" },
   });
-  for (const domain of ["ie.edu", "student.ie.edu", "alumni.ie.edu"]) {
-    await db.schoolDomain.upsert({ where: { domain }, update: {}, create: { domain, schoolId: ie.id } });
+  // Students only for now. Staff (ie.edu) and alumni are deliberately excluded.
+  const allowed = ["student.ie.edu"];
+  for (const domain of allowed) {
+    await db.schoolDomain.upsert({ where: { domain }, update: { active: true }, create: { domain, schoolId: ie.id } });
   }
+  // Deactivate (never delete) any other domains previously seeded for IE.
+  await db.schoolDomain.updateMany({ where: { schoolId: ie.id, domain: { notIn: allowed } }, data: { active: false } });
   const terms = [
     { code: "2025-FALL", name: "Fall 2025", startsOn: "2025-09-01", endsOn: "2025-12-22" },
     { code: "2026-SPRING", name: "Spring 2026", startsOn: "2026-01-12", endsOn: "2026-05-31" },

@@ -15,7 +15,7 @@ export function SignInForm() {
         <>
           <div className="field">
             <label htmlFor="email">University email</label>
-            <span className="hint" id="email-hint">Use your personal IE address. Shared or departmental mailboxes can&apos;t sign up.</span>
+            <span className="hint" id="email-hint">Use your personal IE student address (@student.ie.edu). Shared or departmental mailboxes can&apos;t sign up.</span>
             <input id="email" name="email" type="email" autoComplete="email" required aria-describedby="email-hint" defaultValue={state.email} />
           </div>
           <SubmitButton pendingLabel="Sending code…">Send sign-in code</SubmitButton>

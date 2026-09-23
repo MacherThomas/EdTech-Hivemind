@@ -18,6 +18,14 @@ export async function startEmailChallenge(rawEmail: string): Promise<{ ok: true;
   if (!check.ok) return { ok: false, error: check.reason };
   const school = await resolveSchoolForEmail(check.email);
   if (!school) {
+    const known = await db.schoolDomain.findUnique({ where: { domain: check.domain }, include: { school: true } });
+    if (known) {
+      const active = await db.schoolDomain.findMany({ where: { schoolId: known.schoolId, active: true }, select: { domain: true } });
+      return {
+        ok: false,
+        error: `Only ${known.school.name} student addresses can sign up right now${active.length ? ` (${active.map((d) => `@${d.domain}`).join(", ")})` : ""}.`,
+      };
+    }
     return { ok: false, error: "That email domain isn't on the list of participating universities." };
   }
 
