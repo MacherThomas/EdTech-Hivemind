@@ -1,0 +1,90 @@
+/*
+ * IE University design tokens.
+ * Layer 1 (base) is copied verbatim from the IE design system token file.
+ * Layer 2 (semantic) maps usage → base tokens. Components use only layer 2.
+ */
+:root {
+  /* ── Base: typography ── */
+  --typography-fontfamilies-primary: "Montserrat";
+  --typography-fontfamilies-secondary: "PT Serif";
+  --typography-fontweights-regular: 400;
+  --typography-fontweights-medium: 500;
+  --typography-fontweights-semibold: 600;
+  --typography-fontweights-bold: 700;
+  --typography-fontweights-extrabold: 800;
+
+  /* ── Base: colour ── */
+  --color-primary-oceanblue: #000066;
+  --color-primary-seablue: #47BFFF;
+  --color-secondary-marineblue: #0032A0;
+  --color-secondary-marineblue2: #0000A0;
+  --color-secondary-electricblue: #0000DB;
+  --color-secondary-lightblue: #BDE8FF;
+  --color-grey-ieblack: #0F0F0F;
+  --color-grey-darkgrey: #434445;
+  --color-grey-middlegrey: #888A8C;
+  --color-grey-lightgrey: #BFC1C3;
+  --color-grey-softgrey: #F8F8F8;
+  --color-grey-iewhite: #F4F4F4;
+  --color-grey-white: #FFFFFF;
+  --color-school-sntdark: #1F3700;
+  --color-semantic-winered: #7E1103;
+  --color-semantic-tangerine: #FF7B31;
+  --color-semantic-lemonyellow: #FBCA1E;
+  --color-semantic-accept: #23CE6B;
+  --color-semantic-alert: #F31233;
+  --color-semantic-iceblue: #E6F7FF;
+  --color-semantic-midnight: #23207E;
+
+  /* ── Semantic: fonts ── */
+  --font-ui: var(--typography-fontfamilies-primary), var(--font-montserrat), Arial, Helvetica, sans-serif;
+  --font-editorial: var(--typography-fontfamilies-secondary), var(--font-ptserif), Georgia, "Times New Roman", serif;
+
+  /* ── Semantic: type scale (IE spec) ── */
+  --type-h1-size: 40px; --type-h1-lh: 44px; /* page title (H1 64px is hero-only) */
+  --type-h2-size: 28px; --type-h2-lh: 34px;
+  --type-h3-size: 22px; --type-h3-lh: 28px; /* = Title XL */
+  --type-h4-size: 18px; --type-h4-lh: 24px; /* = Title L */
+  --type-body-size: 16px; --type-body-lh: 24px; /* Body S — minimum for main content */
+  --type-small-size: 14px; --type-small-lh: 20px; /* Body XS — metadata only */
+  --type-label-size: 14px; /* Label L */
+  --type-button-size: 15px; /* Button L */
+  --type-tab-size: 14px;
+
+  /* ── Semantic: colour roles ── */
+  --text-primary: var(--color-grey-ieblack);
+  --text-secondary: var(--color-grey-darkgrey);
+  --text-heading: var(--color-primary-oceanblue);
+  --text-link: var(--color-secondary-electricblue);
+  --text-on-brand: var(--color-grey-white);
+  --text-success: var(--color-school-sntdark);
+  --text-error: var(--color-semantic-winered);
+  --surface-page: var(--color-grey-iewhite);
+  --surface-card: var(--color-grey-white);
+  --surface-subtle: var(--color-grey-softgrey);
+  --surface-brand: var(--color-primary-oceanblue);
+  --surface-info: var(--color-semantic-iceblue);
+  --surface-accent: var(--color-secondary-lightblue);
+  --surface-warning: #FFF4CC; /* tint of Lemon Yellow; IE Black text on it ≈ 18:1 */
+  --surface-error: #FBE9E7;
+  --surface-success: #EAF7E0;
+  --border-subtle: var(--color-grey-lightgrey); /* decorative dividers only */
+  --border-control: var(--color-grey-middlegrey); /* inputs: ≥3:1 vs white */
+  --border-strong: var(--color-grey-darkgrey);
+  --accent-decor: var(--color-primary-seablue); /* never text */
+  --accent-warning: var(--color-semantic-lemonyellow);
+  --accent-error: var(--color-semantic-alert);
+  --accent-success: var(--color-semantic-accept);
+  --focus-ring: var(--color-secondary-electricblue);
+  --action-primary-bg: var(--color-primary-oceanblue);
+  --action-primary-bg-hover: var(--color-secondary-marineblue2);
+  --action-primary-text: var(--color-grey-white);
+  --action-secondary-border: var(--color-primary-oceanblue);
+  --action-secondary-text: var(--color-primary-oceanblue);
+
+  /* ── Semantic: space & shape ── */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px;
+  --radius-s: 4px; --radius-m: 8px;
+  --content-max: 1120px;
+}
