@@ -8,6 +8,10 @@ A community-led study platform for IE University. Every course is a self-contain
 
 ## Quick start
 
+**Easiest (Mac/Windows/Linux, only Node.js needed):** `npm install`, then `npm run local`. It starts a private database, loads the courses and demo data, and serves the site at http://localhost:3000. Step-by-step: [docs/RUN-ON-MAC.md](docs/RUN-ON-MAC.md).
+
+**Manual setup:**
+
 Requirements: Node 20+, PostgreSQL 14+.
 
 ```bash

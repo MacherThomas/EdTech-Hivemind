@@ -7,3 +7,4 @@ uploads/
 *.tsbuildinfo
 next-env.d.ts
 e2e-out/
+.local-db/
