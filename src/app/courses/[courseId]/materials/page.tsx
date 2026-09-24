@@ -171,7 +171,7 @@ export default async function MaterialsPage({
             <ActionForm action={uploadMaterial.bind(null, courseId)}>
               <div className="field">
                 <label htmlFor="file">File</label>
-                <span className="hint" id="file-hint">PDF, Word, PowerPoint, text, Markdown or image, up to 15 MB.</span>
+                <span className="hint" id="file-hint">PDF, Word, PowerPoint, text, Markdown or image, up to 15 MB. Upload a syllabus (PDF or text) as type &quot;Syllabus&quot; to set up the study guide&apos;s topics.</span>
                 <input id="file" name="file" type="file" required aria-describedby="file-hint" />
               </div>
               <div className="field">

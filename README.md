@@ -23,6 +23,19 @@ Sign in at http://localhost:3000/signin with any address on an allowlisted domai
 
 To turn AI features back on later, set `AI_ENABLED=true` and `ANTHROPIC_API_KEY` (model: `AI_MODEL`, default `claude-opus-5`).
 
+## Adding real courses
+
+Course catalogue entries live in `prisma/courses/*.json` and are loaded by `npm run db:seed` (idempotent). To add one from an IE syllabus PDF:
+
+```bash
+npx tsx scripts/import-syllabus.ts path/to/syllabus.pdf      # writes prisma/courses/<code>.json
+npm run db:seed
+```
+
+Only the course metadata and the session programme are kept (no staff bios, emails or grading details). Topics are read from the programme. Students can also upload a syllabus PDF under **Materials → Syllabus** in any course, and the study guide's topics are built from it.
+
+Current catalogue (BBA year 3, Fall 2026): Strategies for Competing in Industries and Markets, Data Analysis for Economics, Human Capital Management, Management Control, Supply Chain Management.
+
 ## Checks
 
 ```bash

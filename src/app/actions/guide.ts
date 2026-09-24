@@ -10,6 +10,7 @@ import { assessMaterialGate } from "@/lib/integrity";
 import { completeSession, createStudyPlan, shuffle, submitAnswer } from "@/lib/study/service";
 import { runJob } from "@/jobs";
 import { aiEnabled } from "@/lib/features";
+import { programmeSection } from "@/lib/syllabus";
 import { handle, optStr, str, UserError } from "./util";
 import type { FormState } from "@/components/ActionForm";
 
@@ -18,7 +19,7 @@ export async function saveSyllabus(courseId: string, _: FormState, form: FormDat
     const user = await requireUser();
     await assertCanContribute(user, courseId);
     const text = z.string().trim().min(40, "Paste the syllabus text (at least a few lines).").max(100_000).parse(str(form, "syllabus"));
-    await db.course.update({ where: { id: courseId }, data: { syllabusText: text } });
+    await db.course.update({ where: { id: courseId }, data: { syllabusText: programmeSection(text) } });
     const res = (await runJob("guide.buildTopics", { courseId })) as { count: number };
     revalidatePath(`/courses/${courseId}/guide`);
     if (res.count === 0) {

@@ -6,6 +6,8 @@
  * SchoolDomain table, so changing it needs no code change.
  */
 import { PrismaClient } from "@prisma/client";
+import fs from "fs";
+import path from "path";
 import { recomputeReputation } from "../src/jobs/reputation";
 import { buildTopicStructure } from "../src/jobs/topics";
 
@@ -38,7 +40,55 @@ async function main() {
     });
   }
   console.log("Seeded IE University, domains and terms.");
+  await catalogue(ie.id);
   if (process.env.SEED_DEMO === "1") await demo(ie.id);
+}
+
+type CatalogueEntry = {
+  code: string;
+  name: string;
+  description?: string;
+  term?: string;
+  professors?: string[];
+  /** Programme/session section of the syllabus only; no contact details or bios. */
+  syllabusProgramme?: string;
+};
+
+/** Real courses from prisma/courses/*.json. Idempotent; never overwrites community edits. */
+async function catalogue(schoolId: string) {
+  const dir = path.join(process.cwd(), "prisma", "courses");
+  if (!fs.existsSync(dir)) return;
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+    const c = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")) as CatalogueEntry;
+    const course = await db.course.upsert({
+      where: { schoolId_code: { schoolId, code: c.code } },
+      update: {},
+      create: { schoolId, code: c.code, name: c.name, description: c.description, syllabusText: c.syllabusProgramme },
+    });
+    if (c.term) {
+      const term = await db.term.findUnique({ where: { schoolId_code: { schoolId, code: c.term } } });
+      if (term) {
+        await db.courseOffering.upsert({
+          where: { courseId_termId: { courseId: course.id, termId: term.id } },
+          update: {},
+          create: {
+            courseId: course.id,
+            termId: term.id,
+            professors: {
+              connectOrCreate: (c.professors ?? []).map((name) => ({
+                where: { schoolId_name: { schoolId, name } },
+                create: { schoolId, name },
+              })),
+            },
+          },
+        });
+      }
+    }
+    if (course.syllabusText && (await db.topic.count({ where: { courseId: course.id } })) === 0) {
+      await buildTopicStructure({ courseId: course.id });
+    }
+    console.log(`Catalogue: ${c.code} ${c.name} (${await db.topic.count({ where: { courseId: course.id } })} topics)`);
+  }
 }
 
 /** Fictional demo content so every section has something to show locally. */

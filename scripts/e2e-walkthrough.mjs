@@ -176,7 +176,8 @@ try {
   await page.goto(`${courseBase}/tutors`);
   log("tutors listed:", await page.locator("ol.list-plain > li").count());
   await page.click("text=See times & book");
-  await page.locator("input[name=slot]").first().check();
+  // Book the last offered slot (days away) so cancelling tests the free-cancellation path.
+  await page.locator("input[name=slot]").last().check();
   await page.fill("#note", "Elasticity practice");
   await page.click("button:has-text('Request session')");
   await page.waitForURL(/tutoring\?booked=/);

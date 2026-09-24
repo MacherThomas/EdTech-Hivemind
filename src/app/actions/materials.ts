@@ -11,6 +11,8 @@ import { putObject } from "@/lib/storage";
 import { getAI } from "@/lib/ai";
 import { canGroundAI } from "@/lib/integrity";
 import { runJob } from "@/jobs";
+import { pdfToText } from "@/lib/pdf";
+import { programmeSection } from "@/lib/syllabus";
 import { handle, optStr, str, UserError } from "./util";
 import type { FormState } from "@/components/ActionForm";
 
@@ -43,7 +45,11 @@ export async function uploadMaterial(courseId: string, _: FormState, form: FormD
     await assertBelongsToCourse(courseId, { topicIds, offeringId });
 
     const buf = Buffer.from(await file.arrayBuffer());
-    const extractedText = TEXT_TYPES.includes(mime) ? buf.toString("utf8").slice(0, 200_000) : null;
+    const extractedText = TEXT_TYPES.includes(mime)
+      ? buf.toString("utf8").slice(0, 200_000)
+      : mime === "application/pdf"
+        ? (await pdfToText(buf))?.slice(0, 200_000) ?? null
+        : null;
     const storageKey = await putObject(buf, file.name);
 
     let suggested = false;
@@ -87,15 +93,20 @@ export async function uploadMaterial(courseId: string, _: FormState, form: FormD
 
     let msg = "Uploaded.";
     if (kind === "SYLLABUS" && extractedText) {
-      await db.course.update({ where: { id: courseId }, data: { syllabusText: extractedText } });
-      await runJob("guide.buildTopics", { courseId });
-      msg += " The course topic structure was rebuilt from this syllabus.";
+      // Keep only the session programme (drops staff bios, contact details…).
+      await db.course.update({ where: { id: courseId }, data: { syllabusText: programmeSection(extractedText) } });
+      const res = (await runJob("guide.buildTopics", { courseId })) as { count: number };
+      msg += res.count
+        ? ` ${res.count} topics were read from this syllabus into the study guide.`
+        : " No session topics could be read from it. Add topics by hand in the Study guide tab.";
+    } else if (kind === "SYLLABUS") {
+      msg += " Its text couldn't be read (a scanned PDF?). Paste the session list in the Study guide tab instead.";
     }
     if (suggested) msg += " Topics were suggested by the AI from the file's text. Please check them.";
     if (!canGroundAI({ kind, assessmentStatus, termEndsOn: material.offering?.term.endsOn })) {
       msg += " Because it may still be graded, it's marked as possibly live.";
     }
-    if (topicIds.length === 0) msg += " Tip: tag it with topics so classmates can find it.";
+    if (topicIds.length === 0 && kind !== "SYLLABUS") msg += " Tip: tag it with topics so classmates can find it.";
     revalidatePath(`/courses/${courseId}/materials`);
     return { ok: msg };
   });

@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "20mb" },
   },
-  serverExternalPackages: ["@prisma/client"],
+  serverExternalPackages: ["@prisma/client", "unpdf"],
 };
 
 export default nextConfig;
