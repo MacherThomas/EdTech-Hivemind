@@ -26,6 +26,12 @@ export async function startEmailChallenge(rawEmail: string): Promise<{ ok: true;
         error: `Only ${known.school.name} student addresses can sign up right now${active.length ? ` (${active.map((d) => `@${d.domain}`).join(", ")})` : ""}.`,
       };
     }
+    if ((await db.schoolDomain.count({ where: { active: true } })) === 0) {
+      return {
+        ok: false,
+        error: "Sign-up isn't set up yet: no university email domains are configured. (Running locally? Stop the site and start it with `npm run local`, which loads them.)",
+      };
+    }
     return { ok: false, error: "That email domain isn't on the list of participating universities." };
   }
 

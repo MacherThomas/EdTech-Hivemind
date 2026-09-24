@@ -37,6 +37,14 @@ async function main() {
   step("Loading courses and demo content…");
   run("npx", ["tsx", "prisma/seed.ts"]);
 
+  // Sanity check: sign-up only works if the email-domain allowlist is loaded.
+  const client = pg.getPgClient("hivemind");
+  await client.connect();
+  const { rows } = await client.query('SELECT domain FROM "SchoolDomain" WHERE active');
+  await client.end();
+  if (rows.length === 0) throw new Error("No sign-up email domains were loaded. Please copy this window's text and share it.");
+  console.log(`  Sign-up allowed for: ${rows.map((r) => "@" + r.domain).join(", ")}`);
+
   console.log(`
 ────────────────────────────────────────────────────────────
   Open http://localhost:3000 in your browser.
